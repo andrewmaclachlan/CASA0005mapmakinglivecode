@@ -1,0 +1,87 @@
+---
+title: "mapping"
+author: "AMacLachlan"
+date: "03/11/2021"
+output: html_document
+---
+
+# Notes
+
+bedroom is at ward - convert to borough
+could also probably just use Local Area District Data
+Hotel is points - summarise over borough
+Airbnb is points - summarise over borough
+
+```{r}
+library(sf)
+library(tmap)
+library(tmaptools)
+library(tidyverse)
+library(here)
+library(janitor)
+```
+
+```{r spatial data}
+OSM <- st_read(here::here(
+                          "greater-london-latest-free.shp", 
+                          "gis_osm_pois_a_free_1.shp")) %>%
+  st_transform(., 27700) %>%
+  #select hotels only
+  filter(fclass == 'hotel')
+
+Londonborough <- st_read(here::here("statistical-gis-boundaries-london",
+                                    "statistical-gis-boundaries-london", 
+                                    "ESRI", 
+                                    "London_Borough_Excluding_MHW.shp"))%>%
+    st_transform(., 27700)
+
+
+Londonward <- st_read(here::here("statistical-gis-boundaries-london",
+                                   "statistical-gis-boundaries-london", 
+                                    "ESRI", 
+                                    "London_Ward.shp"))
+```
+
+```{r Airbnb London}
+
+Airbnb <- read_csv(here::here("listings.csv"))%>%
+  clean_names
+
+
+Airbnbsf <- st_as_sf(Airbnb, coords = c("longitude", "latitude"), 
+                   crs = 4326)%>%
+  st_transform(., 27700)
+
+
+Airbnb_within_London <- st_join(Londonborough, Airbnbsf, join = st_within)
+
+```
+
+
+```{r bedrooms}
+
+beds <- read_csv((here::here("ward_bedrooms.csv")))%>%
+  clean_names()
+  
+
+Londonward_beds <- Londonward %>%
+  left_join(., 
+            beds,
+            by = c("GSS_CODE" = "geography_code"))%>%
+  group_by(LB_GSS_CD, BOROUGH )%>%
+  summarise(sum=sum(bedrooms_all_categories_number_of_bedrooms_measures_value, na.rm=TRUE))
+
+```
+```{r}
+
+Airbnbsf_entire_home <- Airbnbsf %>%
+  filter(room_type == 'Entire home/apt' & availability_365 =='365')
+
+Londonborough_info <- Londonborough %>%
+  st_join(., Airbnbsf_entire_home)%>%
+  add_count(GSS_CODE, name="hotels_in_borough") 
+
+st_join(Londonborough,.)%>%
+  add_count(GSS_CODE, name="hotels_in_borough") 
+```
+
